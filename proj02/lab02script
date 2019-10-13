@@ -1,0 +1,102 @@
+Script started on 2019-09-23 21:23:02-0400
+]0;bda5@gold00: ~/374/proj02[01;32mbda5@gold00[00m:[01;34m~/374/proj02[00m$ cat homework2.c
+/* homework2.c
+ * program that demonstrates message passing and master worker
+ * parallel strategy
+ * Bryce Allen, cs374, proj02, Calvin University
+ */
+#include <stdio.h>
+#include <mpi.h>
+#include <string.h>
+int main(int argc, char** argv)
+{
+    int id = -1, numWorkers = -1;
+    double startTime = 0.0, totalTime = 0.0;
+    int arraySize = 1000*sizeof(char);
+    char sendMessage[arraySize];
+    char buff[5];
+    MPI_Status status;     
+
+    //starts the mpi distributed system parallelization
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &id); 
+    MPI_Comm_size(MPI_COMM_WORLD, &numWorkers);
+
+    //master (id = 0) worker (id > 0) part
+    if ( id == 0 ) {
+        startTime = MPI_Wtime();
+
+        //sends a message to process 1
+        sprintf(sendMessage, "%d ", id);
+        MPI_Send(&sendMessage, 8, MPI_INT, id+1, 1, MPI_COMM_WORLD); 
+
+        //receives a message from process numWorkers - 1
+        MPI_Recv(&sendMessage, 256, MPI_INT, numWorkers-1, MPI_ANY_TAG,
+             MPI_COMM_WORLD, &status);
+        
+        //compute time
+        totalTime = MPI_Wtime() - startTime;
+        
+        //master prints to monitor
+        printf("%s\n",sendMessage);
+        printf("Total time on %d processes: %f\n", numWorkers, totalTime);
+    } else { 
+        //receives message from id - 1
+        MPI_Recv(&sendMessage, 256, MPI_INT, id-1, MPI_ANY_TAG, 
+            MPI_COMM_WORLD, &status);
+
+        //create new message
+        sprintf(buff, "%d ", id); 
+        strcat(sendMessage, buff);
+        
+        //send message to (id + 1) % numWorkers
+        MPI_Send(&sendMessage, 256, MPI_INT, (id+1) % numWorkers, 2, MPI_COMM_WORLD);
+    }
+
+    MPI_Finalize();
+    return 0;
+}]0;bda5@gold00: ~/374/proj02[01;32mbda5@gold00[00m:[01;34m~/374/proj02[00m$ mpicc homework2.c -Wall -o homework2
+]0;bda5@gold00: ~/374/proj02[01;32mbda5@gold00[00m:[01;34m~/374/proj02[00m$ mpri  irun -np 8 ../hosts[1@-[1@m[1@a[1@c[1@h[1@i[1@n[1@e[1@f[1@i[1@l[1@e[1@ ../hosts ./homework2
+0 1 2 3 4 5 6 7 
+Total time on 8 processes: 0.060459
+]0;bda5@gold00: ~/374/proj02[01;32mbda5@gold00[00m:[01;34m~/374/proj02[00m$ ssh bda5@borg
+bda5@borg's password: 
+Last login: Sat Sep 21 11:46:06 2019 from borg-fw1-int.calvin.edu
+]0;bda5@borg-head1:~[?1034h[bda5@borg-head1 ~]$ cd 374
+]0;bda5@borg-head1:~/374[bda5@borg-head1 374]$ cd proj02
+]0;bda5@borg-head1:~/374/proj02[bda5@borg-head1 proj02]$ ls
+borg_script1-1.slurm    homework2.c       slurm-100274.out  slurm-100284.out
+borg_script1-2.slurm    Makefile          slurm-100275.out  slurm-100285.out
+borg_script1-4.slurm    slurm-100266.out  slurm-100276.out  slurm-100286.out
+borg_script16-16.slurm  slurm-100267.out  slurm-100277.out  slurm-100287.out
+borg_script16-8.slurm   slurm-100268.out  slurm-100278.out  slurm-100288.out
+borg_script1-8.slurm    slurm-100269.out  slurm-100279.out  slurm-100289.out
+borg_script2-8.slurm    slurm-100270.out  slurm-100280.out  slurm-100290.out
+borg_script4-8.slurm    slurm-100271.out  slurm-100281.out
+borg_script8-8.slurm    slurm-100272.out  slurm-100282.out
+[0m[38;5;34mhomework2[0m               slurm-100273.out  slurm-100283.out
+]0;bda5@borg-head1:~/374/proj02[bda5@borg-head1 proj02]$ cat borg_script1-8.slurm
+#!/bin/bash
+# Example with 5 nodes, 2 processes each = 10 processes
+#
+# Set the number of nodes to use (max 20)
+#SBATCH -N 1
+#
+# Set the number of processes per node (max 16)
+#SBATCH --ntasks-per-node=8
+#
+
+# Load the compiler and MPI library
+module load openmpi-2.0/gcc
+
+# Run the program
+mpirun ./homework2
+]0;bda5@borg-head1:~/374/proj02[bda5@borg-head1 proj02]$ cat slurm-100273.out
+0 1 2 3 4 5 6 7 
+Total time on 8 processes: 0.000281
+]0;bda5@borg-head1:~/374/proj02[bda5@borg-head1 proj02]$ exit
+logout
+Connection to borg closed.
+]0;bda5@gold00: ~/374/proj02[01;32mbda5@gold00[00m:[01;34m~/374/proj02[00m$ exit
+
+Script done on 2019-09-23 21:33:31-0400
