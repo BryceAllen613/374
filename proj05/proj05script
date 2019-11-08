@@ -1,0 +1,166 @@
+Script started on 2019-10-24 20:05:05-0400
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ ls
+[0m[01;32mcalcPI[0m  calcPI.c  calcPI.o  hosts  integral.c  integral.h  integral.o  Makefile  proj05script
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ make
+make: 'calcPI' is up to date.
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ cat integral.c
+/* integral.c defines integrateTrap(), a function to approximate
+ *  definite integrals using the trapezoidal rule. 
+ *
+ * Joel Adams, Fall 2013.
+ */
+
+#include "integral.h"
+
+/* declaration of the function to be integrated,
+ * which must be defined in the caller of integrate()
+ * or a linking error will occur
+ */
+extern double f(double x); 
+
+/* function to approximate an integral:
+ * parameters: xLo, the left endpoint
+ *             xHi, the right endpoint
+ *             numTrapezoids, the number of trapezoids to use
+ * return: the approximate integral of f(x) from x1 to x2.
+ */
+long double integrateTrap(double xLo, double xHi,
+                           unsigned long long numTrapezoids) {
+   long double delta = (xHi - xLo) / numTrapezoids;
+   long double result = 0;
+   unsigned long long i = 0;
+
+   result = (f(xLo) + f(xHi)) * 0.5;
+   for (i = 1; i < numTrapezoids; i++) {
+     result += f(xLo + i*delta);
+   }
+   result *= delta;
+
+   return result;
+} 
+
+/* Note: The integral is approximately
+ *   delta * (f(xLo) + f(x1)) / 2
+ * + delta * (f(x1) + f(x2)) / 2
+ * + delta * (f(x2) + f(x3)) / 2
+ * ...
+ * + delta * (f(x[n-2] + f(x[n-1]) / 2
+ * + delta * (f(x[n-1]) + f(x[n])) / 2
+ */
+
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ cat integral.h
+/* integral.h declares integral, a function to calculate
+ *  definite integrals using the trapezoidal rule.
+ *
+ * Joel Adams, Fall 2013 for CS 374 at Calvin College.
+ */
+
+long double integrateTrap(double xLo, double xHi,
+                          unsigned long long numTrapezoids);
+
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ cat calcPI.c
+/* calcPi.c calculates PI using the integral of the unit circle.
+ * Since the area of the unit circle is PI, 
+ *  PI = 4 * the area of a quarter of the unit circle 
+ *    (i.e., its integral from 0.0 to 1.0)
+ *
+ * Joel Adams, Fall 2013 for CS 374 at Calvin College.
+ * 
+ * Edited to run parallel on MPI by Bryce Allen, 
+ * cs374, proj05, Calvin University 10/19/19
+ */
+
+#include "integral.h" // integrate()
+#include <stdio.h>    // printf(), etc.
+#include <stdlib.h>   // exit()
+#include <math.h>     // sqrt()
+#include <mpi.h>
+
+/* function for unit circle (x^2 + y^2 = 1)
+ * parameter: x, a double
+ * return: sqrt(1 - x^2)
+ */
+double f(double x)
+{
+   return sqrt(1.0 - x * x);
+}
+
+/* retrieve desired number of trapezoids from commandline arguments
+ * parameters: argc: the argument count
+ *             argv: the argument vector
+ * return: the number of trapezoids to be used.
+ */
+unsigned long long processCommandLine(int argc, char **argv)
+{
+   if (argc == 1)
+   {
+      return 1;
+   }
+   else if (argc == 2)
+   {
+      //       return atoi( argv[1] );
+      return strtoull(argv[1], 0, 10);
+   }
+   else
+   {
+      fprintf(stderr, "Usage: ./calcPI [numTrapezoids]");
+      exit(1);
+   }
+}
+
+int main(int argc, char **argv)
+{
+   //Setup
+   const long double REFERENCE_PI = 3.141592653589793238462643383279L;
+   int numProcesses = 0;
+   double startTime, endTime = 0;
+   int id = -1;
+   long double approximatePI = 0;
+   long double total;
+
+   //Initilize MPI
+   MPI_Init(&argc, &argv);
+   MPI_Comm_rank(MPI_COMM_WORLD, &id);
+   MPI_Comm_size(MPI_COMM_WORLD, &numProcesses);
+   
+   //Setup number of trapezoids per process
+   unsigned long long numTrapezoids = processCommandLine(argc, argv)/numProcesses;
+
+   //Setup range to compute per process.
+   double x = numProcesses;
+   double chunkSize = 1.0/x;
+   
+   //Start Timing
+   startTime = MPI_Wtime();
+   
+   //Calculate integral of unit circle range 0 to 1, evenly distributed among pe's.
+   approximatePI = integrateTrap(chunkSize*id, chunkSize*(id+1),
+      numTrapezoids);
+   //reduce to a global long double 'total'
+   MPI_Reduce(&approximatePI, &total, 1, MPI_LONG_DOUBLE, MPI_SUM, 
+            0, MPI_COMM_WORLD);
+
+   total *= 4.0;
+
+   //End Timing
+   endTime = MPI_Wtime() - startTime;
+
+   //process 0 outputs results.
+   if(id == 0)
+   {
+      printf("Using %d processes and %llu trapezoids, the approximate vs actual values of PI are:\n%.30Lf\n%.30Lf\n",
+          numProcesses, (numTrapezoids*numProcesses), total, REFERENCE_PI);
+      printf("\nTime: %f\n", endTime);
+   }
+   MPI_Finalize();
+   return 0;
+}
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ mpirun -np 256 -oversubscribe -machinefile hosts ./calcPI 100000000000
+Using 256 processes and 100000000000 trapezoids, the approximate vs actual values of PI are:
+3.141592653589793017118725337866
+3.141592653589793238512808959406
+
+Time: 6.008661
+]0;bda5@gold17: ~/374/proj05[01;32mbda5@gold17[00m:[01;34m~/374/proj05[00m$ [Kexit
+
+Script done on 2019-10-24 20:06:43-0400
