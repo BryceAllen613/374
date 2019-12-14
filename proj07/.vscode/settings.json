@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "array": "c",
+        "*.tcc": "c",
+        "memory": "c",
+        "istream": "c",
+        "tuple": "c",
+        "utility": "c"
+    }
+}
